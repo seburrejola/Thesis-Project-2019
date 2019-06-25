@@ -3,7 +3,7 @@ import random
 import copy
 import itertools as it
 
-import lifeparticle_force as lf_force
+import lifeparticle_force2 as lf_force
 
 '''
 Particle class and it functions.
@@ -21,6 +21,7 @@ class particle:
         self.color=color
         self.new_is_color=[[],[]]
         self.old_is_color=[[],[]]
+        self.life_cont=0
 
                 
     def move_dt(self,dt,boundary,nu):
@@ -35,6 +36,7 @@ class particle:
             
         self.x += self.vx*dt
         self.y += self.vy*dt
+        self.pos=(self.x,self.y)
     
     def random_vel(self,noise):
         '''
@@ -69,18 +71,24 @@ class particle:
         This function calculates the change in velocitiy of the particle due to
         the viscous drag.
         '''
-        Fdrag = -6 * np.pi * self.R * nu
-        self.vx += (dt/self.m)*Fdrag*self.vx
-        self.vy += (dt/self.m)*Fdrag*self.vy
+        #Fdrag = -6 * np.pi * self.R * nu
+        #dt*6*nu*np.pi=0.94 con nu=5,R=1 y mass=1
+        
+        #self.vx += (dt/self.m)*Fdrag*self.vx
+        #self.vy += (dt/self.m)*Fdrag*self.vy
+        
+        self.vx += -nu*self.vx
+        self.vy += -nu*self.vy
               
     def cluster_check1_color(self,pl,agent_j,molecular_rad):
         '''
         This function is the first fucntion to check the particle neighborhood 
         for the local measurment of a cluster.
         '''
-        self.old_is_color[1]=[]
-        for index in self.old_is_color[0]:
-            self.old_is_color[1].append(pl[index].color)
+        self.old_is_color=[[],[]]
+        #self.old_is_color[1]=[]
+        #for index in self.old_is_color[0]:
+         #   self.old_is_color[1].append(pl[index].color)
                 
         for i in range(len(pl)):
             if i!=agent_j:
@@ -88,7 +96,7 @@ class particle:
                 if radio<molecular_rad and i not in self.old_is_color[0]:
                     self.old_is_color[0].append(i)
                     self.old_is_color[1].append(pl[i].color)
-  
+
     def cluster_check2_color(self,pl,agent_j,molecular_rad):
         '''
         This function is the second fucntion to check the particle neighborhood 
@@ -110,8 +118,9 @@ class particle:
         then the particle will be able to mutate to a new type depending on the
         type of this particle and one of the measured particles.
         '''
+        self.life_cont=0
         colors_list=['b','r','m','g','k','c','y'] 
-        self.cluster_check2_color(pl,agent_j,molecular_rad)
+        #self.cluster_check2_color(pl,agent_j,molecular_rad) #esto lo cambio cuando estaba trabajando en el informe
         aux2=list(set(self.new_is_color[1])&set(self.old_is_color[1]))
         if len(aux2)!=0:
             
@@ -125,7 +134,106 @@ class particle:
 
         self.old_is_color[0]=copy.copy(list(set(self.new_is_color[0])&set(self.old_is_color[0])))
         for index in self.old_is_color[0]:
+            #pl[index].life_cont=0
             self.old_is_color[1].append(pl[index].color)
+
+class Cluster_class:
+    def __init__(self,particles,aparition_step):
+        self.particles = particles
+        self.frame_cont = 1
+        self.aparition_step = aparition_step
+        self.lost_agents=[]
+        self.new_agents=[]
+        self.old_particles=[]
+        self.status='alive'
+        self.updated=0
+        
+    def update_particles(self,cluster,step):
+        dif=cluster^self.particles
+        self.old_particles.append((copy.copy(self.particles),step))
+        self.lost_agents.append((self.particles & dif,step))
+        self.new_agents.append((cluster & dif,step))
+        self.particles=cluster
+        self.frame_cont+=1
+        self.updated=1
+        
+        
+def save_cluster(cl,ccl,step):
+    aux_ccl=[[],[]]
+
+    updated_clusters=[]
+    for i in range(len(ccl)):#loop para generar los testings, basicamente armas cl[].step-1 en aux_ccl
+        if ccl[i].status=='alive':
+            aux_ccl[0].append(ccl[i].particles)
+            aux_ccl[1].append(i)
+            ccl[i].status='testing'
+       
+    
+    if cl_check(aux_ccl[0])==0 and len(aux_ccl[0])>0:
+        print('fuck me',step, aux_ccl[0])
+    
+        
+    
+    for j in range(len(cl)):
+        not_sharing_cont=0
+        if len(aux_ccl[0])==0:#por si no tengo nada alive
+            break
+        
+        if cl[j] in aux_ccl[0]:#gate para aumentar el frame_cont si esque sigue igual que antes
+            ccl[aux_ccl[1][aux_ccl[0].index(cl[j])]].frame_cont+=1
+            ccl[aux_ccl[1][aux_ccl[0].index(cl[j])]].status='alive'
+            updated_clusters.append(cl[j])
+            
+        if cl[j] not in aux_ccl[0]:
+            for l in range(len(aux_ccl[0])):#loop para agregar los cluster que comparter particulas y los que no comparten ninguna
+                if cl[j]&aux_ccl[0][l]!=set() and ccl[aux_ccl[1][l]].status=='testing': #compartir -> ak & ak2 != set()
+                    if cl[j] not in updated_clusters: 
+                        sharing_agents(cl[j],ccl,step,aux_ccl[1][l],updated_clusters)
+                if cl[j]&aux_ccl[0][l]==set() and ccl[aux_ccl[1][l]].status=='testing': #no compartir -> ak & ak2 == set()
+                    #ccl.append(Cluster_class(cl[j],69))
+                    not_sharing_cont+=1
+        
+        #if not_sharing_cont==len(aux_ccl[0]):
+        #    ccl.append(Cluster_class(cl[j],step+1000))
+         #   updated_clusters.append(cl[j])
+            #not_sharing_cont=0
+            
+    for m in aux_ccl[1]:#loop de muerte a quien sigue en testing
+        if ccl[m].status=='testing' and ccl[m].updated==0:
+            ccl[m].status='died in the step ' + str(step)
+        if ccl[m].status=='testing' and ccl[m].updated==1:
+            ccl[m].status='alive'
+            ccl[m].updated=0
+        
+        
+    for cluster_set in cl:
+        if cluster_set not in updated_clusters:
+            ccl.append(Cluster_class(cluster_set,step+1000))
+        
+        
+    if len(ccl)==0:# or len(aux_ccl[0])==0:# and len(cl)!=0:#loop para llenar ccl
+        if len(cl)!=0:
+            for n in range(len(cl)):
+                ccl.append(Cluster_class(cl[n],'pene'+str(step)))
+                    
+                    
+    
+    
+
+def sharing_agents(cluster,ccl,step,j,updated_clusters):
+    if len(cluster&ccl[j].particles)>=len(ccl[j].particles)*0.5:
+        #print(j,step)
+        ccl[j].update_particles(cluster,step)
+        updated_clusters.append(cluster)
+        
+    if len(cluster&ccl[j].particles)<=len(ccl[j].particles)*0.5:
+        #print('ctm')
+        ccl.append(Cluster_class(cluster,420))
+        ccl[len(ccl)-1].status='alive'#'shared agents in the step '+str(step)+' with cluster '+str(j)
+        ccl[len(ccl)-1].old_particles.append((ccl[j].particles,step))
+        updated_clusters.append(cluster)
+
+   
 
 
 def initial_conditions(N,colors,boundary_init,mass,pl):
@@ -151,17 +259,21 @@ def initial_conditions(N,colors,boundary_init,mass,pl):
         
 
 
-def add_agent(lpos,colors,mass,pl):
-    '''
-    This function adds a new particle to the system. For now it just add the 
-    particle in the middle of the space, and it will have color = 6 or = 'y'.
-    '''
+'''
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+'''    
+def add_agent(lpos,color,mass,pl,agent_j):
+    pl[agent_j].life_cont=0
+    #for index in pl[agent_j].old_is_color[0]:
+     #   pl[index].life_cont=0
+        
     colors_list=['b','r','m','g','k','c','y']
-    color=6#random.randint(1,colors)-1
-    velocity=random.uniform(0,1)
+    color=color#random.randint(1,colors)-1
+    velocity=random.uniform(0,1) #podria aca poner 0 o la mitad del momento que tenia la celula madre.
     angle=random.uniform(0,1)
-    xrand=20
-    yrand=10
+    e1=random.uniform(0,1)
+    xrand=pl[agent_j].x+0.35*e1
+    yrand=pl[agent_j].y+0.35*(1-e1)
     vx = velocity * np.cos( 2* np.pi * angle)
     vy = velocity * np.sin( 2* np.pi * angle)
     #print(vx,vy,vx**2 + vy**2 ,velocity**2)
@@ -172,8 +284,17 @@ def add_agent(lpos,colors,mass,pl):
     lpos[2].append(colors_list[color])
     lpos[3].append(15)
 
-    
-
+def testing_div_func(agent_j,pl,lpos,mass):
+    #if len(set(pl[agent_j].new_is_color[0])&set(pl[agent_j].old_is_color[0]))>0:
+        #print('hola')
+    colorr=pl[agent_j].color
+    if random.uniform(0,1)<0.01:
+        colorr=random.randint(0,6)
+    add_agent(lpos,colorr,mass,pl,agent_j)
+        
+'''
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+'''
 def set_lpos(lpos,pl):
     '''
     This function set the list 'lpos', where lpos=[[],[],[],[]], this list is
@@ -264,22 +385,96 @@ def clustering_radios(cluster_list,pl):
 
 
 
+def step_function(step,boundary,nu,frame,dt,N_max,delta_t,steps,theta_div,theta_dif,pl,lpos,mass,noise,molecular_rad,action_radio,mutate_rules,colors,force_parameters,writer1):
+        
+    '''
+    %%%%%%% MUTATION FUNCTIONS %%%%%%%
+    In the next two 'if's we update the lists for the local clustering meassurements
+    '''
+    
+    if len(pl)<N_max and step>100:
+        
+        e1=random.randint(0,len(pl)-1)
+        if pl[e1].life_cont>=theta_div and random.uniform(0,1)<0.1:
+            testing_div_func(e1,pl,lpos,mass)
+            if len(pl)==N_max:
+                print('len(pl) =',len(pl),',| Step =',step)
+                print('Remaining computation time (in minutes):',((steps-step)/1000)*((N_max/100)**2))
+    
+    if step%delta_t==0:#step==2:#
+        for i in range(len(pl)):
+            pl[i].cluster_check1_color(pl,i,molecular_rad)
+    
+    if (step+6)%delta_t==0:
+        for i in range(len(pl)):
+            pl[i].cluster_check2_color(pl,i,molecular_rad)
+            if len(pl)>N_max*0.5 and pl[i].life_cont>=theta_dif and random.uniform(0,1)<0.05:#and pl[i].color in mutant_colors
+                
+                pl[i].mutate(i,lpos,pl,colors,molecular_rad,mutate_rules)
+        
+    '''
+    %%%%%%% MOVEMENT FUNCTIONS %%%%%%%
+    In the next 'double for' the code calculates all the change in velocity due
+    to the force interactions between particles and the random motion.
+    
+    Then in the second 'for' all the changes of the positions of the particles
+    are calculated.
+    '''
+    
+    for i in range(len(pl)):
+        for j in range(len(pl)):
+            if i!=j :
+                radioo=np.sqrt((pl[i].x - pl[j].x)**2 +(pl[i].y - pl[j].y)**2 )
+                c=-force_parameters[pl[i].color][pl[j].color][0] + 2 * force_parameters[pl[i].color][pl[j].color][1]
+                if radioo < c:
+                    pl[i].force_interaction(pl[j].x,pl[j].y,action_radio,pl[j].color,force_parameters,dt,radioo)
+                    
+        pl[i].random_vel(noise) # Random motion
+        
+    for l in range(len(pl)):
+        pl[l].life_cont+=1
+        pl[l].move_dt(dt,boundary,nu)
+    
+    '''
+    %%%%%%% SAVING THE SIMULATON INFO %%%%%%%
+    
+    First we update the list with the information of the particles and then 
+    we write it in the txt we opened at the begining of the code
+    '''
+    
+    if step%frame==0:
+        update_scatt(lpos,pl)
+        N=copy.copy(len(pl))
+        writer1.write(str(N))
+        writer1.write(',')
+        for i in range(len(lpos)):
+            writer1.write('|,')
+            for j in range(len(lpos[i])):    
+                writer1.write(str(lpos[i][j]))
+                writer1.write(',')
+        writer1.write('\n')
+
+
 
 '''
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-The next functions are for the code read_write_txt.py
+The next functions are for the code read_simulation_data.py
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 '''
 
 
 
-def set_old_new_is(N,old_is,new_is):
+def set_old_new_is(N,old_is,new_is,tipo):
     '''
     This function sets two lists for the global clustering measurment.
     '''
-    for i in range(N):
-        old_is.append([[],[]])
-        new_is.append([])
+    if tipo=='old':
+        for i in range(N):
+            old_is.append([[],[]])
+    if tipo=='new':
+        for i in range(N):
+            new_is.append([])
+            
 
 
 
@@ -384,7 +579,7 @@ def radio_function(radios,agent_j,cluster,lpos):
     
 def clusters(N,lpos,molecular_rad,cl,old_is,new_is):
     '''
-    (0).-This function sets the list 'cl' into a list of sets. Each set 
+    (0).-This function builds the list 'cl' into a list of sets. Each set 
     represents a cluster, so in each set we are going to have a group of 
     numbers that are the identification number for each particle.
     
@@ -412,9 +607,10 @@ def clusters(N,lpos,molecular_rad,cl,old_is,new_is):
     clustering_check2(N,lpos,new_is,molecular_rad)
     for i in range(N): 
         aux0=[]
-               
+        
+        
         for index in new_is[i][0]:
-            if lpos[2][index] in set(new_is[i][1])&set(old_is[i][1]) and index not in aux0:
+            if index<(N-1) and lpos[2][index] in set(new_is[i][1])&set(old_is[i][1]) and index not in aux0:
                 aux0.append(index)
         
         cl_aux.append(set(aux0))
@@ -459,7 +655,7 @@ def clusters(N,lpos,molecular_rad,cl,old_is,new_is):
 
         
     for r in cl_aux3:       #The clusterd well measured are added to cl
-        if r not in cl:
+        if r not in cl and len(r)>1:
             cl.append(r)
             
             
@@ -513,7 +709,7 @@ def save_freq_plot1(lista,cl):
         
     lista.append(copy.copy(aux_array))
 
-def save_freq_plot2(lista,cl):
+def save_freq_plot2(lista):
     '''
     This function sets and array that is going to be used to obtain the plot
     of 'frequency of clusters' vs 'size of clusters'.
@@ -531,4 +727,62 @@ def save_freq_plot2(lista,cl):
             
     return array_x
     
-                
+def save_freq_plot3(ccl):
+    array_x=np.zeros((len(ccl),1))
+    for i in range(len(ccl)):
+        array_x[i,0]=copy.copy(len(ccl[i].particles))
+    
+    return array_x
+        
+        
+
+def reading_lpos(lpos,N,lineas,colors_list,old_is,new_is,step):
+    linea=lineas[step].split(',')
+    linea.remove('\n')
+    N=int(linea[0])
+    del linea[0]
+    
+    
+    
+    #lpos2=[[],[],[],[]]
+    
+    set_old_new_is(N,old_is,new_is,'new')
+    cont1=0
+    cont2=0
+    for element in linea:
+        if element!='|':
+            if element not in colors_list:
+                lpos[cont1].append(float(element))
+                cont2+=1
+            if element in colors_list:
+                cont2+=1
+                lpos[cont1].append(element)
+        if cont2==N:
+            cont1+=1
+            cont2=0
+
+
+def average_ls_per_sim(big_ccl,life_spams,average_ls):
+    cont=0
+    for ccl in big_ccl:
+        life_spam=[]
+        for cluster in ccl:
+            life_spam.append(cluster.frame_cont)
+        average_ls.append([np.mean(life_spam),np.std(life_spam)])
+        print('Sim',cont,'had a average and an std of', average_ls[cont],'and a max of',max(life_spam))
+        cont+=1
+        life_spams.append(life_spam)
+        
+    ak=big_ccl[0]+big_ccl[1]+big_ccl[2]+big_ccl[3]+big_ccl[4]
+    ak2=[]
+    for cluster in ak:
+        ak2.append(cluster.frame_cont)
+        
+    print('Scenario average life spam',np.mean(ak2),', with an std of',np.std(ak2))
+        
+        
+        
+
+
+
+            
