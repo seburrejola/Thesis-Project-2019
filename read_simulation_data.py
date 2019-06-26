@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import copy as copy
 
-import classes_and_functions2 as caf
+import classes_and_functions as caf
 
 '''
 This code will open the data previously saved of a simulation and it will
