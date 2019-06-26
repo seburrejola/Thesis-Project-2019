@@ -4,8 +4,8 @@ import time
 import copy 
 from datetime import datetime
 
-import lifeparticle_force2 as lf_force
-import classes_and_functions2 as caf
+import lifeparticle_force as lf_force
+import classes_and_functions as caf
 
 '''
 The imported code: 'lifeparticle_force.py' has functions to calculate and to 
