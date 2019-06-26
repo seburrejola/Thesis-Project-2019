@@ -3,7 +3,7 @@ import random
 import copy
 import itertools as it
 
-import lifeparticle_force2 as lf_force
+import lifeparticle_force as lf_force
 
 '''
 Particle class and it functions.
