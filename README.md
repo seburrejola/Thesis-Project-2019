@@ -1,4 +1,7 @@
 # Thesis-Project-2019
+
+Simulation scenarios examples: https://www.youtube.com/playlist?list=PLwBHE71Fa7NxdhEfZCcEb2GJ1g2mi7ThQ
+
 In this group of codes we have a simulation of a 'free-particle' game of life, with physical and biological components.
 
 We have 4 codes: practica1.py , classes_and_functions.py , lifeparticle_force.py and read_write_txts.py .
